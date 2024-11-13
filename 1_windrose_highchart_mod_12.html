@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wind Rose Chart with Highcharts</title>
+    <!-- Highcharts Library -->
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://code.highcharts.com/highcharts-more.js"></script>
+    <script src="https://code.highcharts.com/modules/exporting.js"></script>
+    <script src="https://code.highcharts.com/modules/accessibility.js"></script>
+    <!-- Libraries for File Processing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <input type="file" id="fileInput" accept=".csv, .xlsx" />
+    <div id="container" style="height: 600px; width: 800px;"></div>
+    <div id="loading" style="display: none;">Loading...</div>
+    <div id="fileStatus" style="display: none;">Processing file...</div>
+
+    <script>
+        // Menampilkan loading saat file sedang diproses
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+
+        // Menyembunyikan loading setelah file selesai diproses
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Menampilkan status pemrosesan file
+        function showFileProcessingStatus() {
+            document.getElementById('fileStatus').style.display = 'block';
+        }
+
+        // Menyembunyikan status pemrosesan setelah file selesai diproses
+        function hideFileProcessingStatus() {
+            document.getElementById('fileStatus').style.display = 'none';
+        }
+
+        // Mengambil arah indeks dari derajat (0-360)
+        function getDirectionIndex(degree) {
+            if (degree >= 348.75 || degree < 11.25) return 0;  // N
+            if (degree < 33.75) return 1;  // NNE
+            if (degree < 56.25) return 2;  // NE
+            if (degree < 78.75) return 3;  // ENE
+            if (degree < 101.25) return 4; // E
+            if (degree < 123.75) return 5; // ESE
+            if (degree < 146.25) return 6; // SE
+            if (degree < 168.75) return 7; // SSE
+            if (degree < 191.25) return 8; // S
+            if (degree < 213.75) return 9; // SSW
+            if (degree < 236.25) return 10; // SW
+            if (degree < 258.75) return 11; // WSW
+            if (degree < 281.25) return 12; // W
+            if (degree < 303.75) return 13; // WNW
+            if (degree < 326.25) return 14; // NW
+            return 15; // NNW
+        }
+
+        // Mengonversi data mentah ke format yang dapat digunakan Highcharts
+        function formatData(rawData) {
+            const categories = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+
+            // Array untuk menyimpan jumlah angin untuk setiap arah dan kategori Beaufort
+            const beaufortCategories = Array.from({ length: 16 }, () => Array(12).fill(0));
+
+            rawData.forEach(row => {
+                const degree = row.direction;
+                const speed = row.speed;
+
+                if (typeof degree !== 'number' || isNaN(degree) || degree < 0 || degree > 360) {
+                    return;
+                }
+
+                if (typeof speed !== 'number' || isNaN(speed) || speed < 0) {
+                    return;
+                }
+
+                const directionIndex = getDirectionIndex(degree);
+
+                // Tentukan kategori Beaufort berdasarkan kecepatan angin
+                let beaufortIndex = 0;
+                if (speed < 0.1) beaufortIndex = 0;  // Calm
+                else if (speed < 1.5) beaufortIndex = 1;  // Light Air
+                else if (speed < 3.3) beaufortIndex = 2;  // Light Breeze
+                else if (speed < 5.4) beaufortIndex = 3;  // Gentle Breeze
+                else if (speed < 7.9) beaufortIndex = 4;  // Moderate Breeze
+                else if (speed < 10.7) beaufortIndex = 5; // Fresh Breeze
+                else if (speed < 13.8) beaufortIndex = 6; // Strong Breeze
+                else if (speed < 17.1) beaufortIndex = 7; // Gale
+                else if (speed < 20.7) beaufortIndex = 8; // Strong Gale
+                else if (speed < 24.4) beaufortIndex = 9; // Storm
+                else if (speed < 28.4) beaufortIndex = 10; // Violent Storm
+                else beaufortIndex = 11;  // Hurricane
+
+                beaufortCategories[directionIndex][beaufortIndex] += 1;
+            });
+
+            // Hitung total untuk setiap arah dan kategori Beaufort
+            const totalDataPoints = beaufortCategories.reduce((sum, direction) => sum + direction.reduce((s, count) => s + count, 0), 0);
+
+            return {
+                categories,
+                beaufortCategories: beaufortCategories.map(direction =>
+                    direction.map(value => (value / totalDataPoints) * 100)  // Mengubah jumlah menjadi persentase
+                )
+            };
+        }
+
+        // Menampilkan chart Wind Rose dengan menggunakan Highcharts
+        function renderWindRoseChart(data) {
+            Highcharts.chart('container', {
+                chart: { polar: true, type: 'column' },
+                title: { text: 'Wind Rose' },
+                subtitle: { text: 'Windrose plot based on Beaufort Scale' },
+                pane: { size: '90%', startAngle: 0 },
+                xAxis: {
+                    categories: data.categories,
+                    tickmarkPlacement: 'on',
+                    lineWidth: 0,
+                    startAngle: 0,
+                },
+                yAxis: {
+                    min: 0,
+                    endOnTick: false,
+                    showLastLabel: true,
+                    title: { text: 'Frequency (%)' },
+                    labels: { formatter: function () { return this.value + '%'; } }
+                },
+                tooltip: { pointFormat: '{series.name}: <b>{point.y:.2f}%</b>', shared: false },
+                plotOptions: {
+                    series: {
+                        stacking: 'normal',
+                        shadow: false,
+                        groupPadding: 0,
+                        pointPlacement: 'on'
+                    }
+                },
+                series: [
+                    { name: 'Calm', data: data.beaufortCategories.map(direction => direction[0]), color: 'rgba(0, 204, 204, 0.75)' },
+                    { name: 'Light Air', data: data.beaufortCategories.map(direction => direction[1]), color: 'rgba(204, 204, 0, 0.75)' },
+                    { name: 'Light Breeze', data: data.beaufortCategories.map(direction => direction[2]), color: 'rgba(51, 51, 225, 0.75)' },
+                    { name: 'Gentle Breeze', data: data.beaufortCategories.map(direction => direction[3]), color: 'rgba(0, 255, 0, 0.75)' },
+                    { name: 'Moderate Breeze', data: data.beaufortCategories.map(direction => direction[4]), color: 'rgba(255, 255, 0, 0.75)' },
+                    { name: 'Fresh Breeze', data: data.beaufortCategories.map(direction => direction[5]), color: 'rgba(255, 128, 0, 0.75)' },
+                    { name: 'Strong Breeze', data: data.beaufortCategories.map(direction => direction[6]), color: 'rgba(255, 0, 0, 0.75)' },
+                    { name: 'Gale', data: data.beaufortCategories.map(direction => direction[7]), color: 'rgba(128, 0, 0, 0.75)' },
+                    { name: 'Strong Gale', data: data.beaufortCategories.map(direction => direction[8]), color: 'rgba(0, 0, 255, 0.75)' },
+                    { name: 'Storm', data: data.beaufortCategories.map(direction => direction[9]), color: 'rgba(255, 64, 64, 0.75)' },
+                    { name: 'Violent Storm', data: data.beaufortCategories.map(direction => direction[10]), color: 'rgba(128, 64, 0, 0.75)' },
+                    { name: 'Hurricane', data: data.beaufortCategories.map(direction => direction[11]), color: 'rgba(64, 64, 64, 0.75)' }
+                ]
+            });
+        }
+
+        // Memproses file yang diunggah
+        function processFile(file) {
+            const fileName = file.name;
+            showLoading();
+            showFileProcessingStatus();
+            
+            if (fileName.endsWith('.csv')) {
+                Papa.parse(file, {
+                    header: true,
+                    dynamicTyping: true,
+                    complete: function(results) {
+                        hideLoading();
+                        hideFileProcessingStatus();
+                        if (results.errors.length > 0) {
+                            alert('Error parsing CSV file.');
+                            return;
+                        }
+                        const data = formatData(results.data);
+                        renderWindRoseChart(data);
+                    }
+                });
+            } else if (fileName.endsWith('.xlsx')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    hideLoading();
+                    hideFileProcessingStatus();
+                    try {
+                        const workbook = XLSX.read(e.target.result, { type: 'binary' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: true });
+                        const data = formatData(jsonData);
+                        renderWindRoseChart(data);
+                    } catch (error) {
+                        alert('Error processing Excel file.');
+                    }
+                };
+                reader.readAsBinaryString(file);
+            } else {
+                hideLoading();
+                hideFileProcessingStatus();
+                alert('Please upload a valid .csv or .xlsx file.');
+            }
+        }
+
+        // Menangani perubahan file yang diunggah
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) processFile(file);
+        });
+    </script>
+</body>
+</html>
