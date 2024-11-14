@@ -147,8 +147,14 @@
 
             // Verifikasi total akhir setelah normalisasi
             const totalNormalizedPercentage = normalizedPercentages.reduce((sum, direction) => sum + direction.reduce((s, percent) => s + percent, 0), 0);
-
-            console.log("Total Persentase Setelah Normalisasi:", totalNormalizedPercentage);
+            
+            // console.log("Total Persentase Setelah Normalisasi:", totalNormalizedPercentage);
+            // console.log("Beaufort Categories (sebelum normalisasi):", beaufortCategories);
+            // console.log("Total Data Points:", totalDataPoints);
+            // console.log("Persentase Awal (sebelum normalisasi):", initialPercentages);
+            // console.log("Total Persentase Awal:", totalInitialPercentage);
+            // console.log("Faktor Penyesuaian:", adjustmentFactor);
+            // console.log("Persentase Setelah Normalisasi:", normalizedPercentages);
 
             return {
                 categories,
